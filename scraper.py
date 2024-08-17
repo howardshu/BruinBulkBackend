@@ -1,65 +1,89 @@
 # scraper.py
 import requests
-from bs4 import BeautifulSoup
+import bs4
+import numpy as np
+import Constants
+
+# TODO: add ability to show different days and separate meals
+# aspects of the link include dining hall, day, meal
 
 
-def get_dining_hall_links():
+def get_dining_halls():
     url = 'https://menu.dining.ucla.edu/hours/'
     response = requests.get(url)
-    soup = BeautifulSoup(response.text, 'html.parser')
+    soup = bs4.BeautifulSoup(response.text, 'html.parser')
 
-    dining_halls = {}
+    # empty list
+    dining_halls = []
 
-    for link in soup.select('.dining-hall-card a'):
-        hall_name = link.get_text().strip()
-        hall_url = 'https://menu.dining.ucla.edu' + link['href']
-        dining_halls[hall_name] = hall_url
+    for hall in soup.select('td.hours-head > a:nth-child(3)'):
+        if hall.getText() == "Menu":
+            url = hall.get('href')
+            dining_halls.append(url)
 
     return dining_halls
 
 
 def get_menu_for_hall(hall_url):
     response = requests.get(hall_url)
-    soup = BeautifulSoup(response.text, 'html.parser')
+    soup = bs4.BeautifulSoup(response.text, 'html.parser')
 
-    menu_items = []
+    # empty dictionary
+    menu_items = {}
 
-    for item in soup.select('.menu-item'):
-        food_name = item.select_one('.recipename').get_text().strip()
-        nutrition_url = 'https://menu.dining.ucla.edu' + item['href']
+    for item in soup.select('.recipelink'):
+        nutrition_url = item.get('href')
 
         # Get nutritional facts from the item page
-        nutrition_facts = get_nutrition_facts(nutrition_url)
+        try:
+            food_name, nutrition_facts = get_nutrition_facts(nutrition_url)
+        except: # TODO: better deal with unavailable items
+            food_name, nutrition_facts = item.getText(), "Information unavailable"
 
-        menu_items.append({
-            'name': food_name,
-            'nutrition': nutrition_facts,
-        })
+        menu_items[food_name] = nutrition_facts
 
     return menu_items
 
 
 def get_nutrition_facts(nutrition_url):
     response = requests.get(nutrition_url)
-    soup = BeautifulSoup(response.text, 'html.parser')
+    soup = bs4.BeautifulSoup(response.text, 'html.parser')
 
-    nutrition_facts = {}
+    name = soup.select('h2')
+    serv_size_tags = soup.select('.nfserv')
+    serv_size_str = serv_size_tags[0].getText()
 
-    # Example: Extracting calorie information
-    calorie_info = soup.find('span', text='Calories')
-    if calorie_info:
-        nutrition_facts['calories'] = calorie_info.find_next('span').get_text().strip()
+    serv_size_str = serv_size_str.replace("&nbsp;", " ")
 
-    # Add more fields as needed
-    # Example: Fat, Protein, Carbohydrates, etc.
+    food_name = name[0].getText() + ' ' + serv_size_str
 
-    return nutrition_facts
+    # empty array (see Constants.py), could also make nutrition class type or use dictionary
+    nutrition_facts = np.zeros(14)
+
+    calorie_info = soup.select('.nfcal')
+    nutrient_info = soup.select('.nfnutrient')
+    all_info = calorie_info + nutrient_info
+    # TODO: add calcium, potassium, iron, vitamin D functionality
+
+    for item in all_info:
+        info_str = item.getText().strip()
+        if info_str[-1] == '%':
+            temp = info_str.rsplit(' ', 1)
+            info_str = temp[0]
+        info_list = info_str.rsplit(' ', 1)
+        idx = Constants.INDICES[info_list[0]]
+        info_list[1] = info_list[1].replace(Constants.UNITS[idx], '')
+        nutrition_facts[Constants.INDICES[info_list[0]]] = float(info_list[1])
+
+    return food_name, nutrition_facts
 
 
-# Example usage
-dining_halls = get_dining_hall_links()
-for hall_name, hall_url in dining_halls.items():
-    print(f"Menu for {hall_name}:")
-    menu = get_menu_for_hall(hall_url)
-    for item in menu:
-        print(f"- {item['name']}: {item['nutrition']}")
+# Test usage
+halls = get_dining_halls()
+for hall in halls:
+    print(hall)
+    menu = get_menu_for_hall(Constants.LINK + hall)
+    for key, value in menu.items():
+        print(key)
+        print(value)
+    print()
