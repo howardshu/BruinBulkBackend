@@ -79,6 +79,7 @@ def get_nutrition_facts(nutrition_url):
 
 
 # Test usage
+"""
 halls = get_dining_halls()
 for hall in halls:
     print(hall)
@@ -87,3 +88,4 @@ for hall in halls:
         print(key)
         print(value)
     print()
+"""
