@@ -1,7 +1,7 @@
 # app.py
 from flask import Flask, jsonify, json
 import Constants
-from scraper import get_dining_halls, get_menu_for_hall
+from scraper import get_dining_halls, get_menu_for_api
 import numpy as np
 
 app = Flask(__name__)
@@ -10,7 +10,13 @@ app = Flask(__name__)
 @app.route('/dining_halls', methods=['GET'])
 def dining_halls():
     halls = get_dining_halls()
-    return jsonify(halls)
+    # will become list of dictionaries holding dining hall names
+    dining_halls = []
+    for hall in halls:
+        dictionary = {'name': hall}
+        dining_halls.append(dictionary)
+
+    return dining_halls
 
 # ex. hall_name = 'Rieber'
 @app.route('/menu/<hall_name>', methods=['GET'])
@@ -21,12 +27,12 @@ def menu(hall_name):
     if not found:
         return jsonify({"error": "Dining hall not found"}), 404
 
-    menu = get_menu_for_hall(Constants.LINK + hall_link)
+    menu = get_menu_for_api(Constants.LINK + hall_link)
 
     # NumPy arrays cannot be jsonified, so turn them into lists
-    for key in menu:
-        if isinstance(menu[key], np.ndarray):
-            menu[key] = menu[key].tolist()
+    # for key in menu:
+    #     if isinstance(menu[key], np.ndarray):
+    #         menu[key] = menu[key].tolist()
 
     return jsonify(menu)
     # return json.dumps(menu)

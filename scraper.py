@@ -8,12 +8,13 @@ import Constants
 # aspects of the link include dining hall, day, meal
 
 
+# returns a list of dining halls
 def get_dining_halls():
     url = 'https://menu.dining.ucla.edu/hours/'
     response = requests.get(url)
     soup = bs4.BeautifulSoup(response.text, 'html.parser')
 
-    # empty list
+    # list of dining hall names
     dining_halls = []
 
     for hall in soup.select('td.hours-head > a:nth-child(3)'):
@@ -24,7 +25,33 @@ def get_dining_halls():
     return dining_halls
 
 
-def get_menu_for_hall(hall_url):
+# returns a list of menu items to send to the API for display at frontend
+def get_menu_for_api(hall_url):
+    response = requests.get(hall_url)
+    soup = bs4.BeautifulSoup(response.text, 'html.parser')
+
+    # empty list
+    menu_items = []
+
+    for item in soup.select('.recipelink'):
+        nutrition_url = item.get('href')
+
+        # Get nutritional facts from the item page
+        try:
+            food_name, nutrition_facts = get_nutrition_facts(nutrition_url)
+            nutrition_facts = nutrition_facts.tolist()
+        except: # TODO: better deal with unavailable items
+            food_name, nutrition_facts = item.getText(), None
+
+        dictionary = {'name': food_name, 'nutrition': nutrition_facts}
+        menu_items.append(dictionary)
+
+    return menu_items
+
+
+# returns a dictionary with the food name as the key and array representing nutrition as value
+# for backend calculation
+def get_menu_nutrition(hall_url):
     response = requests.get(hall_url)
     soup = bs4.BeautifulSoup(response.text, 'html.parser')
 
@@ -38,7 +65,7 @@ def get_menu_for_hall(hall_url):
         try:
             food_name, nutrition_facts = get_nutrition_facts(nutrition_url)
         except: # TODO: better deal with unavailable items
-            food_name, nutrition_facts = item.getText(), "Information unavailable"
+            food_name, nutrition_facts = item.getText(), None
 
         menu_items[food_name] = nutrition_facts
 
