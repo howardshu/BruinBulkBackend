@@ -26,6 +26,7 @@ def get_dining_halls():
 
 
 # returns a list of menu items to send to the API for display at frontend
+# nutrition represented as dictionary
 def get_menu_for_api(hall_url):
     response = requests.get(hall_url)
     soup = bs4.BeautifulSoup(response.text, 'html.parser')
@@ -33,15 +34,21 @@ def get_menu_for_api(hall_url):
     # empty list
     menu_items = []
 
+    # TODO: possibly just send nutrition link to frontend without specific info?
     for item in soup.select('.recipelink'):
         nutrition_url = item.get('href')
 
         # Get nutritional facts from the item page
-        try:
-            food_name, nutrition_facts = get_nutrition_facts(nutrition_url)
-            nutrition_facts = nutrition_facts.tolist()
-        except: # TODO: better deal with unavailable items
-            food_name, nutrition_facts = item.getText(), None
+        food_name, nutrition_tags = get_nutrition_facts(nutrition_url)
+        nutrition_dict = {}
+
+        for item in nutrition_tags:
+            info_str = item.getText().strip() # remove leading and trailing spaces
+            if info_str[-1] == '%': # remove the % DV part of the string if it exists
+                temp = info_str.rsplit(' ', 1)
+                info_str = temp[0]
+            info_list = info_str.rsplit(' ', 1)
+            nutrition_dict[info_list[0]] = info_list[1]
 
         dictionary = {'name': food_name, 'nutrition': nutrition_facts}
         menu_items.append(dictionary)
@@ -49,7 +56,7 @@ def get_menu_for_api(hall_url):
     return menu_items
 
 
-# returns a dictionary with the food name as the key and array representing nutrition as value
+# returns a dictionary with the food name as the key and np array representing nutrition as value
 # for backend calculation
 def get_menu_nutrition(hall_url):
     response = requests.get(hall_url)
@@ -62,17 +69,32 @@ def get_menu_nutrition(hall_url):
         nutrition_url = item.get('href')
 
         # Get nutritional facts from the item page
-        try:
-            food_name, nutrition_facts = get_nutrition_facts(nutrition_url)
-        except: # TODO: better deal with unavailable items
-            food_name, nutrition_facts = item.getText(), None
+        food_name, nutrition_tags = get_nutrition_facts(nutrition_url)
+        # empty array (see Constants.py)
+        nutrition_facts = np.zeros(14)
+
+        for item in nutrition_tags:
+            info_str = item.getText().strip()
+            if info_str[-1] == '%':
+                temp = info_str.rsplit(' ', 1)
+                info_str = temp[0]
+            info_list = info_str.rsplit(' ', 1)
+            idx = Constants.INDICES[info_list[0]]
+            info_list[1] = info_list[1].replace(Constants.UNITS[idx], '')
+            try:
+                nutrition_facts[idx] = float(info_list[1])
+            except ValueError:
+                nutrition_facts[idx] = -1
+        # TODO: better deal with unavailable items
 
         menu_items[food_name] = nutrition_facts
 
     return menu_items
 
 
+# Return the name and a set of HTML tags with nutrition information
 def get_nutrition_facts(nutrition_url):
+    # Retrieve HTML and create bs4 element
     response = requests.get(nutrition_url)
     soup = bs4.BeautifulSoup(response.text, 'html.parser')
 
@@ -84,25 +106,12 @@ def get_nutrition_facts(nutrition_url):
 
     food_name = name[0].getText() + ' ' + serv_size_str
 
-    # empty array (see Constants.py), could also make nutrition class type or use dictionary
-    nutrition_facts = np.zeros(14)
-
     calorie_info = soup.select('.nfcal')
     nutrient_info = soup.select('.nfnutrient')
     all_info = calorie_info + nutrient_info
     # TODO: add calcium, potassium, iron, vitamin D functionality
 
-    for item in all_info:
-        info_str = item.getText().strip()
-        if info_str[-1] == '%':
-            temp = info_str.rsplit(' ', 1)
-            info_str = temp[0]
-        info_list = info_str.rsplit(' ', 1)
-        idx = Constants.INDICES[info_list[0]]
-        info_list[1] = info_list[1].replace(Constants.UNITS[idx], '')
-        nutrition_facts[Constants.INDICES[info_list[0]]] = float(info_list[1])
-
-    return food_name, nutrition_facts
+    return food_name, all_info
 
 
 # Test usage
